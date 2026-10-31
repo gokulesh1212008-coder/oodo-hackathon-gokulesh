@@ -23,6 +23,7 @@ import StaffPage from './pages/StaffPage'
 import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
 import CustomerPortalPage from './pages/CustomerPortalPage'
+import TasksPage from './pages/TasksPage'
 
 import InvoiceViewModal from './components/InvoiceViewModal'
 import SubscriptionDetailModal from './components/SubscriptionDetailModal'
@@ -117,7 +118,8 @@ function MainApp() {
       items: [
         { label: 'Reports & Analytics', icon: CircleDollarSign, path: '/reports' },
         { label: 'Staff Management', icon: ShieldCheck, path: '/staff' },
-        { label: 'Settings & Taxes', icon: Settings, path: '/settings' }
+        { label: 'Settings & Taxes', icon: Settings, path: '/settings' },
+        { label: 'Tasks & Database', icon: Database, path: '/tasks' }
       ]
     }
   ]
@@ -145,7 +147,8 @@ function MainApp() {
       label: 'Intelligence',
       items: [
         { label: 'Reports & Analytics', icon: CircleDollarSign, path: '/reports' },
-        { label: 'Workspace Preferences', icon: Settings, path: '/settings' }
+        { label: 'Workspace Preferences', icon: Settings, path: '/settings' },
+        { label: 'Tasks & Database', icon: Database, path: '/tasks' }
       ]
     }
   ]
@@ -415,6 +418,8 @@ function MainApp() {
                 <ReportsPage onNotify={notify} />
               ) : activePath === '/settings' ? (
                 <SettingsPage onNotify={notify} />
+              ) : activePath === '/tasks' ? (
+                <TasksPage onNotify={notify} />
               ) : (
                 <DashboardPage
                   onNewSubscription={() => setShowSubModal(true)}

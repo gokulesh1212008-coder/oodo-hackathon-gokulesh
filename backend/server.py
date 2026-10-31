@@ -1,4 +1,5 @@
-"""Small JSON API for the Brightloop dashboard.
+"""Small JSON API and Database Backend for Brightloop.
+Connects to SQLite database for persistent storage of Todos, Customers, Plans, and Invoices.
 
 Run with:
     python backend/server.py
@@ -8,11 +9,36 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from db import (
+        create_todo,
+        delete_todo,
+        get_all_customers,
+        get_connection,
+        get_db_stats,
+        get_todos,
+        init_db,
+        toggle_todo,
+    )
+except ImportError:
+    from backend.db import (
+        create_todo,
+        delete_todo,
+        get_all_customers,
+        get_connection,
+        get_db_stats,
+        get_todos,
+        init_db,
+        toggle_todo,
+    )
 
 HOST = "127.0.0.1"
 PORT = 8000
@@ -40,21 +66,13 @@ TRANSACTIONS = [
     {"name": "Neha Kapoor", "company": "Kapoor Retail", "invoice": "INV-2045", "amount": "₹12,900", "date": "Oct 28, 2024", "status": "Paid", "initials": "NK", "color": "blue"},
 ]
 
-CUSTOMERS = [
-    {"name": "Rohan Mehta", "company": "Mehta & Co.", "email": "rohan@mehta.co", "plan": "Scale", "revenue": "₹1,24,000", "status": "Active", "joined": "12 Sep 2024", "initials": "RM", "color": "violet"},
-    {"name": "Ananya Iyer", "company": "Iyer Studios", "email": "ananya@iyerstudios.in", "plan": "Growth", "revenue": "₹86,400", "status": "Active", "joined": "04 Sep 2024", "initials": "AI", "color": "orange"},
-    {"name": "Arjun Nair", "company": "Nair Logistics", "email": "arjun@nairlogistics.com", "plan": "Enterprise", "revenue": "₹2,48,000", "status": "Active", "joined": "28 Aug 2024", "initials": "AN", "color": "teal"},
-    {"name": "Neha Kapoor", "company": "Kapoor Retail", "email": "neha@kapoorretail.in", "plan": "Starter", "revenue": "₹38,700", "status": "Paused", "joined": "19 Aug 2024", "initials": "NK", "color": "blue"},
-    {"name": "Vikram Shah", "company": "Shah & Sons", "email": "vikram@shahandsons.in", "plan": "Growth", "revenue": "₹72,200", "status": "Active", "joined": "07 Aug 2024", "initials": "VS", "color": "pink"},
-]
-
 
 def initials_for(name: str) -> str:
     return "".join(part[0] for part in name.split()[:2]).upper()
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "BrightloopAPI/1.0"
+    server_version = "BrightloopDBAPI/2.0"
 
     def log_message(self, format: str, *args: Any) -> None:
         print(f"{self.address_string()} - {format % args}")
@@ -64,9 +82,9 @@ class ApiHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "http://localhost:5173")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
         self.end_headers()
         self.wfile.write(body)
 
@@ -83,9 +101,20 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path.rstrip("/") or "/"
+        
         if path == "/api/health":
-            self._send_json({"status": "ok"})
+            self._send_json({"status": "ok", "db": get_db_stats()})
+            
+        elif path == "/api/db/stats":
+            self._send_json(get_db_stats())
+
+        elif path == "/api/todos":
+            todos = get_todos()
+            # Support both format {todos: [...]} and raw array [...]
+            self._send_json(todos)
+
         elif path == "/api/dashboard":
+            stats = get_db_stats()
             self._send_json({
                 "revenue": REVENUE,
                 "plans": PLANS,
@@ -93,48 +122,111 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "stats": {
                     "mrr": "₹4,45,000",
                     "activeSubscriptions": "248",
-                    "customers": "1,284",
+                    "customers": str(stats["tableCounts"].get("customers", 5)),
                     "outstanding": "₹86,400",
                 },
+                "db": stats
             })
+
         elif path == "/api/customers":
-            self._send_json({"customers": CUSTOMERS, "total": 248})
+            customers = get_all_customers()
+            self._send_json({"customers": customers, "total": len(customers)})
+
         else:
-            self._send_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
+            self._send_json({"error": "Not found", "path": path}, HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path.rstrip("/")
-        if path != "/api/customers":
+        
+        if path == "/api/todos":
+            try:
+                data = self._read_json()
+                name = str(data.get("name", "")).strip()
+                if not name:
+                    self._send_json({"error": "Todo name is required"}, HTTPStatus.BAD_REQUEST)
+                    return
+                new_todo = create_todo(name)
+                self._send_json(new_todo, HTTPStatus.CREATED)
+            except Exception as e:
+                self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
+            return
+
+        elif path.startswith("/api/todos/") and path.endswith("/toggle"):
+            # e.g. /api/todos/1/toggle
+            parts = path.split("/")
+            try:
+                todo_id = int(parts[3])
+                updated = toggle_todo(todo_id)
+                if updated:
+                    self._send_json(updated)
+                else:
+                    self._send_json({"error": "Todo not found"}, HTTPStatus.NOT_FOUND)
+            except Exception as e:
+                self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
+            return
+
+        elif path == "/api/customers":
+            try:
+                data = self._read_json()
+            except (ValueError, json.JSONDecodeError):
+                self._send_json({"error": "Request body must be valid JSON"}, HTTPStatus.BAD_REQUEST)
+                return
+
+            name = str(data.get("name", "")).strip()
+            email = str(data.get("email", "")).strip()
+            if not name or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+                self._send_json({"error": "A name and valid email are required"}, HTTPStatus.BAD_REQUEST)
+                return
+
+            customer_id = f"CUST-{int(get_db_stats()['tableCounts'].get('customers', 0)) + 1:03d}"
+            company = str(data.get("company", "")).strip() or "New customer"
+            phone = str(data.get("phone", "")).strip() or "+91 98000 00000"
+            address = str(data.get("address", "")).strip() or "Mumbai, India"
+            tax_id = str(data.get("taxId", "")).strip() or "27AABCU0000A1Z5"
+            plan = str(data.get("plan", "")).strip() or "Starter Plan"
+
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO customers (
+                    id, name, company, email, phone, address, tax_id,
+                    plan, status, joined, total_spent, active_subscriptions, initials, color
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Active', 'Today', 0, 1, ?, 'violet');
+            """, (customer_id, name, company, email, phone, address, tax_id, plan, initials_for(name)))
+            conn.commit()
+            conn.close()
+
+            self._send_json({
+                "id": customer_id,
+                "name": name,
+                "company": company,
+                "email": email,
+                "plan": plan,
+                "status": "Active"
+            }, HTTPStatus.CREATED)
+            return
+
+        else:
             self._send_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
-            return
 
-        try:
-            data = self._read_json()
-        except (ValueError, json.JSONDecodeError):
-            self._send_json({"error": "Request body must be valid JSON"}, HTTPStatus.BAD_REQUEST)
-            return
-
-        name = str(data.get("name", "")).strip()
-        email = str(data.get("email", "")).strip()
-        if not name or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
-            self._send_json({"error": "A name and valid email are required"}, HTTPStatus.BAD_REQUEST)
-            return
-
-        customer = {
-            "name": name,
-            "company": str(data.get("company", "")).strip() or "New customer",
-            "email": email,
-            "plan": "Starter",
-            "revenue": "₹0",
-            "status": "Active",
-            "joined": "31 Oct 2024",
-            "initials": initials_for(name),
-            "color": "violet",
-        }
-        CUSTOMERS.insert(0, customer)
-        self._send_json({"customer": customer}, HTTPStatus.CREATED)
+    def do_DELETE(self) -> None:
+        path = urlparse(self.path).path.rstrip("/")
+        if path.startswith("/api/todos/"):
+            parts = path.split("/")
+            try:
+                todo_id = int(parts[3])
+                deleted = delete_todo(todo_id)
+                if deleted:
+                    self._send_json({"success": True, "deleted_id": todo_id})
+                else:
+                    self._send_json({"error": "Todo not found"}, HTTPStatus.NOT_FOUND)
+            except Exception as e:
+                self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
+        else:
+            self._send_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
 
 
 if __name__ == "__main__":
-    print(f"Brightloop API listening on http://{HOST}:{PORT}")
+    init_db()
+    print(f"Brightloop Database & API server listening on http://{HOST}:{PORT}", flush=True)
     ThreadingHTTPServer((HOST, PORT), ApiHandler).serve_forever()
