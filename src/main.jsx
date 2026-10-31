@@ -83,6 +83,7 @@ function App() {
   const [dark, setDark] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [toast, setToast] = useState('')
+  const [customerVersion, setCustomerVersion] = useState(0)
   const location = useLocation()
   const navigate = useNavigate()
   const activePath = location.pathname
@@ -105,12 +106,15 @@ function App() {
     <main className="main">
       <header className="topbar"><button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Open navigation"><Menu size={21} /></button><div className="breadcrumbs"><span>Workspace</span><ChevronRight size={14} /><strong>{pageTitle}</strong></div><div className="top-actions"><div className="global-search"><Search size={16} /><input placeholder="Search anything..." /><kbd>⌘ K</kbd></div><button className="icon-btn notification" aria-label="Notifications"><Bell size={18} /><i /></button><button className="icon-btn" onClick={() => setDark(!dark)} aria-label="Toggle theme">{dark ? <Sun size={18} /> : <Sparkles size={18} />}</button><div className="top-avatar">PS</div></div></header>
       <div className="page">
-        <AnimatePresence mode="wait"><motion.div key={activePath} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .22 }}>{activePath === '/' ? <Dashboard onAdd={() => setShowModal(true)} notify={notify} /> : activePath === '/customers' ? <Customers onAdd={() => setShowModal(true)} notify={notify} /> : activePath === '/reports' ? <Reports notify={notify} /> : activePath === '/settings' ? <SettingsPage notify={notify} /> : <ModulePage data={current} onAdd={() => setShowModal(true)} notify={notify} />}</motion.div></AnimatePresence>
+        <AnimatePresence mode="wait"><motion.div key={activePath} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: .22 }}>{activePath === '/' ? <Dashboard customerVersion={customerVersion} onAdd={() => setShowModal(true)} notify={notify} /> : activePath === '/customers' ? <Customers customerVersion={customerVersion} onAdd={() => setShowModal(true)} notify={notify} /> : activePath === '/reports' ? <Reports notify={notify} /> : activePath === '/settings' ? <SettingsPage notify={notify} /> : <ModulePage data={current} onAdd={() => setShowModal(true)} notify={notify} />}</motion.div></AnimatePresence>
       </div>
     </main>
     {showModal && <AddModal title={activePath === '/' || activePath === '/customers' ? 'Add customer' : `Create ${pageTitle.toLowerCase().replace('subscription plans', 'plan').replace('staff management', 'staff member')}`} onClose={() => setShowModal(false)} onSave={async (formData) => {
       try {
-        if (activePath === '/' || activePath === '/customers') await apiRequest('/api/customers', { method: 'POST', body: JSON.stringify(formData) })
+        if (activePath === '/' || activePath === '/customers') {
+          await apiRequest('/api/customers', { method: 'POST', body: JSON.stringify(formData) })
+          setCustomerVersion(version => version + 1)
+        }
         setShowModal(false)
         notify('Saved successfully')
       } catch (error) {
@@ -129,7 +133,7 @@ function StatCard({ label, value, change, note, icon: Icon, tone }) {
   return <div className="stat-card"><div className={`stat-icon ${tone}`}><Icon size={18} /></div><div className="stat-label">{label}<span className={change?.startsWith('+') ? 'positive' : 'neutral'}>{change}</span></div><strong>{value}</strong><small>{note}</small></div>
 }
 
-function Dashboard({ onAdd, notify }) {
+function Dashboard({ customerVersion, onAdd, notify }) {
   const [dashboard, setDashboard] = useState(null)
   const [error, setError] = useState('')
 
@@ -137,7 +141,7 @@ function Dashboard({ onAdd, notify }) {
     apiRequest('/api/dashboard')
       .then(setDashboard)
       .catch(requestError => setError(requestError.message))
-  }, [])
+  }, [customerVersion])
 
   const revenueData = dashboard?.revenue || defaultRevenueData
   const planData = dashboard?.plans || defaultPlanData
@@ -145,7 +149,7 @@ function Dashboard({ onAdd, notify }) {
   const stats = dashboard?.stats
   return <>{error && <div className="error-banner" role="alert">Could not load live dashboard data: {error}</div>}<PageHeader eyebrow="Friday, 31 October 2024" title={<>Good morning, Priya <span className="wave">✦</span></>} description="Here’s your subscription business at a glance." action="Add customer" onAction={onAdd} />
     <div className="dashboard-controls"><div className="live-status"><span /> Data synced 2 min ago</div><button className="date-filter"><CalendarDays size={15} />Last 6 months<ChevronDown size={14} /></button></div>
-    <div className="stats-grid"><StatCard label="Monthly recurring revenue" value="₹4,45,000" change="+12.8%" note="vs. last month" icon={CircleDollarSign} tone="violet" /><StatCard label="Active subscriptions" value="248" change="+18" note="new this month" icon={Zap} tone="teal" /><StatCard label="Total customers" value="1,284" change="+8.4%" note="vs. last month" icon={Users} tone="orange" /><StatCard label="Outstanding payments" value="₹86,400" change="12 invoices" note="need your attention" icon={FileText} tone="rose" /></div>
+    <div className="stats-grid"><StatCard label="Monthly recurring revenue" value={stats?.mrr || '₹4,45,000'} change="+12.8%" note="vs. last month" icon={CircleDollarSign} tone="violet" /><StatCard label="Active subscriptions" value={stats?.activeSubscriptions || '248'} change="+18" note="new this month" icon={Zap} tone="teal" /><StatCard label="Total customers" value={stats?.customers || '—'} change="+8.4%" note="vs. last month" icon={Users} tone="orange" /><StatCard label="Outstanding payments" value={stats?.outstanding || '₹86,400'} change="12 invoices" note="need your attention" icon={FileText} tone="rose" /></div>
     <div className="chart-grid"><section className="card revenue-card"><div className="section-heading"><div><h2>Revenue overview</h2><p>Collected revenue and recurring revenue over time</p></div><div className="legend"><span><i className="legend-dot purple" />Revenue</span><span><i className="legend-dot mint" />Collected</span><button className="more-btn"><MoreHorizontal size={17} /></button></div></div><div className="chart-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={revenueData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }}><defs><linearGradient id="revenue" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#7166e8" stopOpacity=".23" /><stop offset="100%" stopColor="#7166e8" stopOpacity="0" /></linearGradient></defs><CartesianGrid vertical={false} stroke="#edf0f5" /><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#9aa1af', fontSize: 11 }} /><YAxis axisLine={false} tickLine={false} tick={{ fill: '#9aa1af', fontSize: 11 }} tickFormatter={v => `₹${v / 1000}k`} /><Tooltip formatter={(v) => `₹${v.toLocaleString('en-IN')}`} contentStyle={{ border: 0, borderRadius: 10, boxShadow: '0 8px 24px #1720331a' }} /><Area type="monotone" dataKey="revenue" stroke="#675ce7" strokeWidth={2.5} fill="url(#revenue)" /><Line type="monotone" dataKey="collected" stroke="#35b8a6" strokeWidth={2.5} dot={false} /></AreaChart></ResponsiveContainer></div></section><section className="card plan-card"><div className="section-heading"><div><h2>Plan distribution</h2><p>Active subscriptions by plan</p></div><button className="more-btn"><MoreHorizontal size={17} /></button></div><div className="donut-wrap"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={planData} innerRadius={62} outerRadius={86} paddingAngle={3} dataKey="value" stroke="none">{planData.map(item => <Cell key={item.name} fill={item.color} />)}</Pie><text x="50%" y="46%" textAnchor="middle" dominantBaseline="middle" className="donut-number">248</text><text x="50%" y="57%" textAnchor="middle" dominantBaseline="middle" className="donut-label">subscriptions</text></PieChart></ResponsiveContainer></div><div className="plan-legend">{planData.map(item => <div key={item.name}><span><i style={{ background: item.color }} />{item.name}</span><strong>{item.value}%</strong></div>)}</div></section></div>
     <div className="lower-grid"><section className="card transactions-card"><div className="section-heading"><div><h2>Recent transactions</h2><p>Latest payments from your customers</p></div><button className="link-btn" onClick={() => notify('Showing all transactions')}>View all <ArrowUpRight size={14} /></button></div>    <TransactionTable rows={transactions} /></section><section className="card renewals-card"><div className="section-heading"><div><h2>Upcoming renewals</h2><p>Next 7 days</p></div><button className="more-btn"><MoreHorizontal size={17} /></button></div>{[['Rohan Mehta', 'Scale plan', 'Tomorrow', '₹24,800', 'RM', 'violet'], ['Ananya Iyer', 'Growth plan', '04 Nov', '₹18,500', 'AI', 'orange'], ['Arjun Nair', 'Enterprise plan', '06 Nov', '₹42,000', 'AN', 'teal']].map(item => <div className="renewal" key={item[0]}><div className={`avatar avatar-${item[5]}`}>{item[4]}</div><div className="renewal-info"><strong>{item[0]}</strong><span>{item[1]}</span></div><div className="renewal-amount"><strong>{item[3]}</strong><span>{item[2]}</span></div></div>)}</section></div>
   </>
@@ -154,17 +158,20 @@ function Dashboard({ onAdd, notify }) {
 function TransactionTable({ rows = transactions }) { return <div className="table-scroll"><table><thead><tr><th>Customer</th><th>Invoice</th><th>Amount</th><th>Status</th></tr></thead><tbody>{rows.map(row => <tr key={row.invoice}><td><div className="person-cell"><div className={`avatar avatar-${row.color}`}>{row.initials}</div><div><strong>{row.name}</strong><span>{row.company}</span></div></div></td><td><span className="muted">{row.invoice}</span><small className="table-date">{row.date}</small></td><td><strong>{row.amount}</strong></td><td><Status status={row.status} /></td></tr>)}</tbody></table></div> }
 function Status({ status }) { return <span className={`status ${status.toLowerCase().replace(' ', '-')}`}><i />{status}</span> }
 
-function Customers({ onAdd, notify }) {
+function Customers({ customerVersion, onAdd, notify }) {
   const [query, setQuery] = useState('')
   const [customerRows, setCustomerRows] = useState(customers)
+  const [summary, setSummary] = useState({ total: customers.length, active: 4, paused: 1, atRisk: 0 })
   const [error, setError] = useState('')
   useEffect(() => {
-    apiRequest('/api/customers')
-      .then(payload => setCustomerRows(payload.customers))
+    apiRequest(`/api/customers?q=${encodeURIComponent(query)}`)
+      .then(payload => {
+        setCustomerRows(payload.customers)
+        setSummary(payload.summary)
+      })
       .catch(requestError => setError(requestError.message))
-  }, [])
-  const filtered = customerRows.filter(c => `${c.name} ${c.company} ${c.email}`.toLowerCase().includes(query.toLowerCase()))
-  return <>{error && <div className="error-banner" role="alert">Could not load live customers: {error}</div>}<PageHeader eyebrow="Relationship management" title="Customers" description="A clear view of every relationship behind your recurring revenue." action="Add customer" onAction={onAdd} /><div className="summary-strip"><div><span>All customers</span><strong>1,284</strong></div><div><span>Active</span><strong className="green-text">1,174</strong></div><div><span>Paused</span><strong>68</strong></div><div><span>At risk</span><strong className="red-text">42</strong></div></div><section className="card full-table-card"><div className="table-toolbar"><div className="table-title"><h2>All customers</h2><span className="count-pill">248 shown</span></div><div className="toolbar-actions"><div className="small-search"><Search size={15} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search customers..." /></div><button className="outline-btn"><Filter size={15} />Filter</button><button className="outline-btn"><Download size={15} />Export</button></div></div><div className="table-scroll"><table><thead><tr><th>Customer</th><th>Plan</th><th>Revenue</th><th>Joined</th><th>Status</th><th /></tr></thead><tbody>{filtered.map(row => <tr key={row.email}><td><div className="person-cell"><div className={`avatar avatar-${row.color}`}>{row.initials}</div><div><strong>{row.name}</strong><span>{row.company} · {row.email}</span></div></div></td><td><span className="plan-chip">{row.plan}</span></td><td><strong>{row.revenue}</strong></td><td><span className="muted">{row.joined}</span></td><td><Status status={row.status} /></td><td><button className="row-menu" onClick={() => notify(`${row.name} selected`)}><MoreHorizontal size={17} /></button></td></tr>)}</tbody></table></div><div className="pagination"><span>Showing 1–5 of 248 customers</span><div><button><ChevronLeft size={15} /></button><button className="current">1</button><button>2</button><button>3</button><button><ChevronRight size={15} /></button></div></div></section></>
+  }, [query, customerVersion])
+  return <>{error && <div className="error-banner" role="alert">Could not load live customers: {error}</div>}<PageHeader eyebrow="Relationship management" title="Customers" description="A clear view of every relationship behind your recurring revenue." action="Add customer" onAction={onAdd} /><div className="summary-strip"><div><span>All customers</span><strong>{summary.total}</strong></div><div><span>Active</span><strong className="green-text">{summary.active}</strong></div><div><span>Paused</span><strong>{summary.paused}</strong></div><div><span>At risk</span><strong className="red-text">{summary.atRisk}</strong></div></div><section className="card full-table-card"><div className="table-toolbar"><div className="table-title"><h2>All customers</h2><span className="count-pill">{customerRows.length} shown</span></div><div className="toolbar-actions"><div className="small-search"><Search size={15} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search customers..." /></div><button className="outline-btn"><Filter size={15} />Filter</button><button className="outline-btn"><Download size={15} />Export</button></div></div><div className="table-scroll"><table><thead><tr><th>Customer</th><th>Plan</th><th>Revenue</th><th>Joined</th><th>Status</th><th /></tr></thead><tbody>{customerRows.map(row => <tr key={row.email}><td><div className="person-cell"><div className={`avatar avatar-${row.color}`}>{row.initials}</div><div><strong>{row.name}</strong><span>{row.company} · {row.email}</span></div></div></td><td><span className="plan-chip">{row.plan}</span></td><td><strong>{row.revenue}</strong></td><td><span className="muted">{row.joined}</span></td><td><Status status={row.status} /></td><td><button className="row-menu" onClick={() => notify(`${row.name} selected`)}><MoreHorizontal size={17} /></button></td></tr>)}</tbody></table></div><div className="pagination"><span>Showing {customerRows.length} of {summary.total} customers</span><div><button><ChevronLeft size={15} /></button><button className="current">1</button><button>2</button><button>3</button><button><ChevronRight size={15} /></button></div></div></section></>
 }
 
 function ModulePage({ data, onAdd, notify }) {
