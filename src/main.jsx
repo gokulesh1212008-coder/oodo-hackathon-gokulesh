@@ -68,14 +68,24 @@ const modules = {
   '/staff': { title: 'Staff management', eyebrow: 'Team access', description: 'Keep roles and responsibilities clear as you scale.', icon: ShieldCheck, columns: ['Staff member', 'Role', 'Joined', 'Last active', 'Status'], rows: [['Priya Sharma', 'Admin', '12 Jan 2024', 'Just now', 'Active'], ['Aman Verma', 'Billing manager', '18 Mar 2024', '2 hours ago', 'Active'], ['Kavya Rao', 'Sales', '02 Jun 2024', 'Yesterday', 'Active']] }
 }
 
-async function apiRequest(path, options) {
+async function apiRequest(path, options = {}) {
   const response = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options
   })
-  const payload = await response.json()
-  if (!response.ok) throw new Error(payload.error || 'The server request failed')
-  return payload
+  let payload = null
+  const text = await response.text()
+  if (text) {
+    try {
+      payload = JSON.parse(text)
+    } catch {
+      payload = null
+    }
+  }
+  if (!response.ok) {
+    throw new Error((payload && payload.error) || `Server request failed (${response.status})`)
+  }
+  return payload || {}
 }
 
 function App() {
@@ -139,7 +149,10 @@ function Dashboard({ customerVersion, onAdd, notify }) {
 
   useEffect(() => {
     apiRequest('/api/dashboard')
-      .then(setDashboard)
+      .then(data => {
+        setDashboard(data)
+        setError('')
+      })
       .catch(requestError => setError(requestError.message))
   }, [customerVersion])
 
@@ -166,8 +179,9 @@ function Customers({ customerVersion, onAdd, notify }) {
   useEffect(() => {
     apiRequest(`/api/customers?q=${encodeURIComponent(query)}`)
       .then(payload => {
-        setCustomerRows(payload.customers)
-        setSummary(payload.summary)
+        setCustomerRows(payload.customers || [])
+        if (payload.summary) setSummary(payload.summary)
+        setError('')
       })
       .catch(requestError => setError(requestError.message))
   }, [query, customerVersion])
@@ -186,7 +200,11 @@ function EmptyState() { return <div className="empty-state"><div className="empt
 function AddModal({ title, onClose, onSave }) {
   const [formData, setFormData] = useState({ name: '', email: '', company: '' })
   const update = event => setFormData({ ...formData, [event.target.name]: event.target.value })
-  return <div className="modal-backdrop" onMouseDown={onClose}><motion.div initial={{ opacity: 0, scale: .97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="modal" onMouseDown={e => e.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Quick create</div><h2>{title}</h2></div><button className="close-btn" onClick={onClose}><X size={18} /></button></div><div className="form-grid"><label>Name<input name="name" value={formData.name} onChange={update} placeholder="Enter a name" autoFocus /></label><label>Email<input name="email" value={formData.email} onChange={update} placeholder="name@company.com" /></label><label className="wide">Company<input name="company" value={formData.company} onChange={update} placeholder="Company name" /></label></div><div className="modal-footer"><button className="outline-btn" onClick={onClose}>Cancel</button><button className="primary-btn" onClick={() => onSave(formData)}><Plus size={16} />Create</button></div></motion.div></div>
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSave(formData)
+  }
+  return <div className="modal-backdrop" onMouseDown={onClose}><motion.div initial={{ opacity: 0, scale: .97, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="modal" onMouseDown={e => e.stopPropagation()}><div className="modal-heading"><div><div className="eyebrow">Quick create</div><h2>{title}</h2></div><button type="button" className="close-btn" onClick={onClose}><X size={18} /></button></div><form onSubmit={handleSubmit}><div className="form-grid"><label>Name<input name="name" value={formData.name} onChange={update} placeholder="Enter a name" autoFocus required /></label><label>Email<input name="email" type="email" value={formData.email} onChange={update} placeholder="name@company.com" required /></label><label className="wide">Company<input name="company" value={formData.company} onChange={update} placeholder="Company name" /></label></div><div className="modal-footer"><button type="button" className="outline-btn" onClick={onClose}>Cancel</button><button type="submit" className="primary-btn"><Plus size={16} />Create</button></div></form></motion.div></div>
 }
 
 createRoot(document.getElementById('root')).render(<BrowserRouter><App /></BrowserRouter>)

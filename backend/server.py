@@ -173,9 +173,10 @@ class ApiHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Access-Control-Allow-Origin", "http://localhost:5173")
+        origin = self.headers.get("Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", origin)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
         if body:
             self.wfile.write(body)
@@ -436,6 +437,7 @@ class ApiHandler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     initialize_db()
     server = ThreadingHTTPServer((HOST, PORT), ApiHandler)
+    server.daemon_threads = True
     print(f"Brightloop API listening on http://{HOST}:{PORT} using {DB_PATH}")
     try:
         server.serve_forever()
