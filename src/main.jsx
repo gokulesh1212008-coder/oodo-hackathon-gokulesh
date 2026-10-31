@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
+import { BrowserRouter, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowUpRight, Bell, BriefcaseBusiness, CalendarDays, ChevronDown, ChevronLeft,
@@ -449,7 +449,6 @@ function MainApp() {
           subscription={subToView}
           onClose={() => setSubToView(null)}
           onAdvanceStage={(id, stg) => {
-            // Updated via context
             setSubToView(prev => prev ? { ...prev, stage: stg } : null)
           }}
           onGenerateInvoice={(subId) => {

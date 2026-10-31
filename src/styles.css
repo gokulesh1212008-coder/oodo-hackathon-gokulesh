@@ -172,6 +172,19 @@ a {
   text-decoration: none;
 }
 
+.error-banner {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger-border);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* ==========================================================================
    APP SHELL
    ========================================================================== */
