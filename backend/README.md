@@ -7,19 +7,32 @@ The backend uses Python's standard library and built-in SQLite3 engine for zero-
 python backend\server.py
 ```
 
-The database `backend/database.db` is created and seeded automatically on first startup.
+The database `backend/brightloop.db` is created and seeded automatically on first launch.
 
 ## Available REST Endpoints
 
-- `GET /api/health` - Health status and database engine statistics
-- `GET /api/db/stats` - Table row counts across todos, customers, subscriptions, invoices, etc.
-- `GET /api/todos` - Returns persistent todo items
-- `POST /api/todos` - Creates a new persistent todo item
-- `POST /api/todos/<id>/toggle` - Toggles completion status of a todo
-- `DELETE /api/todos/<id>` - Removes a todo from SQLite
-- `GET /api/dashboard` - Unified MRR, subscription metrics, transactions, and live customer stats
-- `GET /api/customers` - Returns customer records
-- `POST /api/customers` - Creates a new customer record
+### System & Health
+- `GET /api/health` — Service health and database connection status
+- `GET /api/db/stats` — SQLite engine stats and table record counts
+- `GET /api/dashboard` — Unified MRR, subscription metrics, and performance chart data
+
+### Customers
+- `GET /api/customers?q=<search>&limit=<1-100>&offset=<n>` — Filtered customer list with pagination
+- `GET /api/customers/<id>` — Retrieve single customer record
+- `POST /api/customers` — Create a new customer (`name`, `email`, optional `company`)
+- `PATCH /api/customers/<id>` — Update customer fields (`name`, `email`, `company`, `plan`, `status`)
+- `DELETE /api/customers/<id>` — Remove a customer
+
+### Todos & Tasks Ledger (SQLite & Supabase Compatible)
+- `GET /api/todos` — Returns list of persistent todos
+- `POST /api/todos` — Inserts a new todo (`name`)
+- `POST /api/todos/<id>/toggle` — Toggles completion status
+- `DELETE /api/todos/<id>` — Deletes a todo item
+
+## Running Backend Tests
+```powershell
+python -m unittest discover -s backend -p "test_*.py"
+```
 
 ## Cloud Supabase Integration (PostgreSQL)
 
